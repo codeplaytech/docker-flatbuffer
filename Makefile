@@ -1,10 +1,24 @@
+include env
 
-protoc_version:=3.17.3
-protoc_url:=http://172.27.155.227:8000/protoc-$(protoc_version)-linux-x86_64.zip
+ifndef version 
+$(error Missing variable "version")
+endif
 
-test-in-devenv:
+ifndef flatc_version 
+$(error Missing variable "flatc_version")
+endif
+
+
+build:
 	docker build . \
-		--build-arg protoc_url=$(protoc_url) \
-		--build-arg goproxy=https://goproxy.cn,direct \
-		--tag cupen/protoc-test:$(protoc_version)
+		--build-arg flatc_version=$(flatc_version) \
+		-t flatbufers:latest
+
+
+tag:
+	git add env
+	git commit -m "tag: $(version)"
+	git tag $(version)
+	git push origin master:master
+	git push origin $(version)
 

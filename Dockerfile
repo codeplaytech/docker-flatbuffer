@@ -1,36 +1,23 @@
-FROM golang:1.16.6-buster AS build
+FROM mcr.microsoft.com/dotnet/sdk:7.0-bullseye-slim AS build
+LABEL maintainer="xcupen@gmail.com"
 
-ARG protoc_version=3.17.3
-ARG protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip
-ADD ${protoc_url} /google-protoc/protoc.zip
-RUN apt-get update
-RUN apt-get install unzip
-RUN cd /google-protoc/ && unzip protoc.zip && ls -ahl
+ARG flatc_version=v23.3.3
+RUN apt-get update && \
+    apt-get install -y \
+        g++ git cmake make
+RUN git clone --branch ${flatc_version} --depth 1 https://github.com/google/flatbuffers.git
 
+# build flatc 
+RUN cd flatbuffers \
+    && cmake -G "Unix Makefiles" \
+    && make
 
-FROM golang:1.16.6-buster AS runtime
-ARG goproxy=direct
-COPY --from=build /google-protoc/ /usr/
-RUN /usr/bin/protoc && ls -ahl /usr/include/google
-
-# install third-party protos
-## gogo/protobuf
-## usage: import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-ADD https://raw.githubusercontent.com/gogo/protobuf/v1.3.2/gogoproto/gogo.proto        /usr/include/github.com/gogo/protobuf/gogoproto/gogo.proto
-
-## AsynkronIT/protoactor-go
-## usage: import "github.com/AsynkronIT/protoactor-go/actor/protos.proto";
-ADD https://raw.githubusercontent.com/AsynkronIT/protoactor-go/dev/actor/protos.proto  /usr/include/github.com/AsynkronIT/protoactor-go/actor/protos.proto
-# NOTE: You don't need to use protos of remote/cluster directly
-ADD https://raw.githubusercontent.com/AsynkronIT/protoactor-go/dev/remote/protos.proto  /usr/include/github.com/AsynkronIT/protoactor-go/remote/protos.proto
-ADD https://raw.githubusercontent.com/AsynkronIT/protoactor-go/dev/cluster/protos.proto  /usr/include/github.com/AsynkronIT/protoactor-go/cluster/protos.proto
+RUN dotnet --version
+RUN dotnet build -m:1 -o ./flatbuffers/net/FlatBuffers/bin/Debug/ "flatbuffers/net/FlatBuffers/Google.FlatBuffers.csproj"
+RUN dotnet build -m:1 -c Release -o ./flatbuffers/net/FlatBuffers/bin/Release/ "flatbuffers/net/FlatBuffers/Google.FlatBuffers.csproj"
 
 
-# install go code generator.
-RUN export GOPROXY=${goproxy} \
-    && go get github.com/gogo/protobuf@v1.3.2 \
-    && go get github.com/gogo/protobuf/protoc-gen-gogoslick@v1.2.1 \
-    && go get github.com/AsynkronIT/protoactor-go/protobuf/protoc-gen-gograin \
-    && go get github.com/AsynkronIT/protoactor-go/protobuf/protoc-gen-gograinv2
-
-ENTRYPOINT ["/usr/bin/protoc", "-I=/usr/include"] 
+FROM debian:bullseye-slim
+COPY --from=build flatbuffers/flatc  /usr/local/bin/flatc
+COPY --from=build /flatbuffers/net/FlatBuffers/bin/Release/Google.FlatBuffers.dll /dll/Release/
+COPY --from=build /flatbuffers/net/FlatBuffers/bin/Debug/Google.FlatBuffers.dll   /dll/Debug/
