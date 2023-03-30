@@ -18,6 +18,7 @@ RUN dotnet build -m:1 -c Release -o ./flatbuffers/net/FlatBuffers/bin/Release/ "
 
 
 FROM debian:bullseye-slim
-COPY --from=build flatbuffers/flatc  /usr/local/bin/flatc
+COPY --from=build flatbuffers/flatc  /usr/bin/flatc
 COPY --from=build /flatbuffers/net/FlatBuffers/bin/Release/Google.FlatBuffers.dll /dll/Release/
 COPY --from=build /flatbuffers/net/FlatBuffers/bin/Debug/Google.FlatBuffers.dll   /dll/Debug/
+ENTRYPOINT ["/usr/bin/flatc"]
