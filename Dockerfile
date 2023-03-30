@@ -1,51 +1,23 @@
-FROM golang:1.20.2-bullseye AS plugin
+FROM mcr.microsoft.com/dotnet/sdk:7.0-bullseye-slim AS build
+LABEL maintainer="xcupen@gmail.com"
 
-ARG protoc_version=3.19.6
-ARG protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip
-ARG goproxy=direct
-ARG repo_name=codeplaytech/protoactor-go
+ARG flatc_version=v23.3.3
+RUN apt-get update && \
+    apt-get install -y \
+        g++ git cmake make
+RUN git clone --branch ${flatc_version} --depth 1 https://github.com/google/flatbuffers.git
 
-ENV GOPROXY=${goproxy}
-ENV GOPATH=/gopath/
+# build flatc 
+RUN cd flatbuffers \
+    && cmake -G "Unix Makefiles" \
+    && make
 
-RUN go install github.com/gogo/protobuf/protoc-gen-gogoslick@v1.3.2 \
-    && go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-
-# install go code generator(compatibility).
-# https://developers.google.com/protocol-buffers/docs/reference/go/faq
-RUN git clone https://github.com/codeplaytech/protoactor-go -b master --depth=1 \
-    && cd ./protoactor-go/protobuf/protoc-gen-gograinv2 \
-    && go install .
-
-RUN pwd
+RUN dotnet --version
+RUN dotnet build -m:1 -o ./flatbuffers/net/FlatBuffers/bin/Debug/ "flatbuffers/net/FlatBuffers/Google.FlatBuffers.csproj"
+RUN dotnet build -m:1 -c Release -o ./flatbuffers/net/FlatBuffers/bin/Release/ "flatbuffers/net/FlatBuffers/Google.FlatBuffers.csproj"
 
 
-FROM python:3.9-slim-bullseye AS protoc
-ARG protoc_version=3.17.3
-ARG protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip
-
-ADD ${protoc_url} /protoc_bin/protoc.zip
-RUN ls -ahl /protoc_bin/protoc.zip
-RUN python -c "import zipfile; zf = zipfile.ZipFile('/protoc_bin/protoc.zip', 'r'); zf.extractall('/protoc_bin/'); zf.close()" \
-    && chmod -R 755 /protoc_bin/
-
-
-FROM debian:bullseye-slim AS runtime
-COPY --from=protoc /protoc_bin/             /usr/
-COPY --from=plugin /gopath/bin/protoc-gen-* /usr/bin/
-
-
-
-# third-party protos
-COPY --from=plugin /go/protoactor-go/actor/protos.proto /usr/include/github.com/asynkron/protoactor-go/actor/actor.proto
-COPY --from=plugin /go/protoactor-go/remote/protos.proto /usr/include/github.com/asynkron/protoactor-go/remote/remote.proto
-
-
-COPY --from=plugin /go/protoactor-go/actor/protos.proto /usr/include/github.com/AsynkronIT/protoactor-go/actor/protos.proto
-
-COPY --from=plugin /go/protoactor-go/remote/protos.proto /usr/include/github.com/AsynkronIT/protoactor-go/remote/protos.proto
-
-# third-party protos (compatibility)
-ADD https://raw.githubusercontent.com/gogo/protobuf/v1.3.2/gogoproto/gogo.proto       /usr/include/github.com/gogo/protobuf/gogoproto/gogo.proto
-
-ENTRYPOINT ["/usr/bin/protoc", "-I=/usr/include"] 
+FROM debian:bullseye-slim
+COPY --from=build flatbuffers/flatc  /usr/local/bin/flatc
+COPY --from=build /flatbuffers/net/FlatBuffers/bin/Release/Google.FlatBuffers.dll /dll/Release/
+COPY --from=build /flatbuffers/net/FlatBuffers/bin/Debug/Google.FlatBuffers.dll   /dll/Debug/

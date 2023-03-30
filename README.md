@@ -1,33 +1,23 @@
 # Usage
 ## Bash
 ```bash
-docker run --rm -it ghcr.io/codeplaytech/protoc:v3.19.6-5
+docker run --rm -it ghcr.io/codeplaytech/flatbuffers:latest
 ```
 
 ## Makefile
 ```makefile
 work_dir :=$(CURDIR)
-protoc :=sudo docker run -it --rm \
+
+flatc :=sudo docker run -it --rm \
 	-v $(work_dir)/:/server \
 	-w /server \
-	ghcr.io/codeplaytech/protoc:v3.19.6-5
+	ghcr.io/codeplaytech/flatbuffers:latest
 
-proto_opts:=-I=. --gogoslick_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:.
-grain_opts:=-I=. --gograinv2_out=.
+flatc_opts :=--gen-onefile --gen-object-api --csharp
 
-proto:
-	@for f in $(shell find . -iname "*.proto"); do \
+fb:
+	@for f in $(shell find . -iname "*.fbs"); do \
 		echo compiling $$f;  \
-		$(protoc) $(proto_opts) $$f; \
+		$(flatc) $(flatc_opts)  $$f; \
 	done
 
-
-proto-grain:
-	@for f in $(shell find . -iname "api.proto"); do \
-		echo compiling $$f;  \
-		$(protoc) $(proto_opts) $$f; \
-		$(protoc) $(grain_opts) $$f; \
-	done
-	sudo rm -fr github_com/
-	sudo rm -fr google/
-```
